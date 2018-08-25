@@ -5,3 +5,4 @@ authors = ["Ben Boyter <ben@boyter.org>"]
 
 [dependencies]
 walkdir = "2"
+memmap = "0.6.2"

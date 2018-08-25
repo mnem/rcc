@@ -1,10 +1,11 @@
 extern crate walkdir;
+extern crate memmap;
 
 use walkdir::WalkDir;
 use std::fs::File;
-use std::io::Read;
 use std::io;
 use walkdir::DirEntry;
+use memmap::Mmap;
 
 fn main() -> Result<(), io::Error> {
     for entry in WalkDir::new("./").into_iter().filter_map(|e| e.ok()) {
@@ -13,7 +14,7 @@ fn main() -> Result<(), io::Error> {
         }
 
         let mut file_job = load_file(&entry)?;
-        process_file(&mut file_job);
+        let _ = process_file(&mut file_job);
 
         println!("{} lines={} bytes={}", file_job.name, file_job.lines, file_job.bytes);
     }
@@ -25,37 +26,39 @@ const NEWLINE: u8 = 10;
 
 fn load_file(entry: &DirEntry) -> Result<(FileJob), io::Error> {
     let path = entry.path();
-    let mut file = File::open(path)?;
-    let mut buffer = Vec::with_capacity(file.metadata().unwrap().len() as usize);
+    let file = File::open(path)?;
 
-    file.read_to_end(&mut buffer)?;
+    let mmap: Option<Mmap> = if file.metadata().unwrap().len() > 0 {
+        Some(unsafe { Mmap::map(&file) }?)
+    } else {
+        None
+    };
 
     return Ok(FileJob {
         name: entry.path().display().to_string(),
         bytes: 0,
-        blank: 0,
-        code: 0,
-        comment: 0,
+        _blank: 0,
+        _code: 0,
+        _comment: 0,
         lines: 0,
-        content: buffer
+        content: mmap,
     })
 }
 
 fn process_file(file_job: &mut FileJob) -> Result<(), io::Error> {
-    let mut bytes_count: u32;
 
-    bytes_count = 0;
+    if let Some(ref content) = file_job.content {
+        for i in content.iter() {
+            if i == &NUL {
+                return Ok(())
+            }
 
-    for i in file_job.content.iter() {
-        if i == &NUL {
-            return Ok(())
+            if i == &NEWLINE {
+                file_job.lines += 1
+            }
+
+            file_job.bytes += 1;
         }
-
-        if i == &NEWLINE {
-            file_job.lines += 1
-        }
-
-        file_job.bytes += 1;
     }
 
     Ok(())
@@ -64,9 +67,9 @@ fn process_file(file_job: &mut FileJob) -> Result<(), io::Error> {
 struct FileJob {
     name: String,
     lines: u32,
-    code: u32,
-    comment: u32,
-    blank: u32,
+    _code: u32,
+    _comment: u32,
+    _blank: u32,
     bytes: u32,
-    content: Vec<u8>
+    content: Option<Mmap>,
 }
